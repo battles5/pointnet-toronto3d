@@ -1,4 +1,4 @@
-"""Funzioni di training, valutazione, GridSearch e Cross-Validation."""
+"""Training, evaluation, GridSearch and Cross-Validation functions."""
 
 import numpy as np
 import torch
@@ -12,33 +12,33 @@ from .dataset import Toronto3DDataset, NUM_CLASSES
 
 
 def get_device():
-    """Ritorna il device disponibile (CUDA > CPU)."""
+    """Return the available device (CUDA > CPU)."""
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def _wrap_model(model):
-    """Wrappa il modello con DataParallel se ci sono più GPU."""
+    """Wrap the model with DataParallel if multiple GPUs are available."""
     if torch.cuda.device_count() > 1:
-        print(f"  Usando {torch.cuda.device_count()} GPU con DataParallel")
+        print(f"  Using {torch.cuda.device_count()} GPUs with DataParallel")
         model = nn.DataParallel(model)
     return model
 
 
 def compute_class_weights(dataset, indices=None, num_classes=NUM_CLASSES):
-    """Calcola pesi inversi per bilanciare le classi."""
+    """Compute inverse weights to balance classes."""
     if indices is not None:
         all_labels = np.concatenate([dataset.labels[i] for i in indices])
     else:
         all_labels = np.concatenate(dataset.labels)
     counts = np.bincount(all_labels, minlength=num_classes).astype(np.float32)
-    counts = np.maximum(counts, 1.0)  # evita divisione per zero
+    counts = np.maximum(counts, 1.0)  # avoid division by zero
     weights = 1.0 / counts
     weights /= weights.sum()
     return weights
 
 
 def train_one_epoch(model, dataloader, optimizer, criterion, device, reg_weight=0.001):
-    """Esegue un'epoca di training. Ritorna (loss media, accuracy)."""
+    """Run one training epoch. Returns (avg loss, accuracy)."""
     model.train()
     total_loss = 0.0
     correct = 0
@@ -71,7 +71,7 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device, reg_weight=
 
 @torch.no_grad()
 def evaluate(model, dataloader, criterion, device, num_classes=NUM_CLASSES):
-    """Valuta il modello. Ritorna (loss, accuracy, mIoU, ious, preds, labels)."""
+    """Evaluate the model. Returns (loss, accuracy, mIoU, ious, preds, labels)."""
     model.eval()
     total_loss = 0.0
     all_preds = []
@@ -95,7 +95,7 @@ def evaluate(model, dataloader, criterion, device, num_classes=NUM_CLASSES):
     all_labels = np.array(all_labels)
     accuracy = (all_preds == all_labels).mean()
 
-    # IoU per classe
+    # Per-class IoU
     ious = []
     for cls in range(num_classes):
         intersection = ((all_preds == cls) & (all_labels == cls)).sum()
@@ -109,18 +109,18 @@ def evaluate(model, dataloader, criterion, device, num_classes=NUM_CLASSES):
 
 
 def grid_search(train_dfs, param_grid, device, num_epochs=5, num_workers=2):
-    """Esegue GridSearch sugli iperparametri.
+    """Run GridSearch over hyperparameters.
 
     Args:
-        train_dfs: lista di DataFrame di training.
-        param_grid: dict con chiavi 'learning_rate', 'batch_size', 'num_points'.
+        train_dfs: list of training DataFrames.
+        param_grid: dict with keys 'learning_rate', 'batch_size', 'num_points'.
         device: torch device.
-        num_epochs: epoche per ogni combinazione.
-        num_workers: workers per DataLoader.
+        num_epochs: epochs per combination.
+        num_workers: workers for DataLoader.
 
     Returns:
-        best_params: dict con i migliori parametri.
-        results: lista di dict con i risultati.
+        best_params: dict with the best parameters.
+        results: list of dicts with results.
     """
     best_params = None
     best_val_miou = 0.0
@@ -182,10 +182,10 @@ def grid_search(train_dfs, param_grid, device, num_epochs=5, num_workers=2):
 
 def cross_validate(train_dfs, params, device, k=5, num_epochs=30,
                    num_workers=2, save_dir='results'):
-    """Esegue K-Fold Cross-Validation con i parametri dati.
+    """Run K-Fold Cross-Validation with the given parameters.
 
     Returns:
-        cv_results: lista di dict per fold con 'fold', 'best_miou',
+        cv_results: list of dicts per fold with 'fold', 'best_miou',
                     'train_losses', 'val_losses'.
     """
     import os
@@ -271,7 +271,7 @@ def cross_validate(train_dfs, params, device, k=5, num_epochs=30,
 
 def train_final_model(train_dfs, params, device, num_epochs=30, num_workers=2,
                       save_path='results/best_model_final.pth'):
-    """Addestra il modello finale su tutto il training set."""
+    """Train the final model on the entire training set."""
     import os
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
@@ -305,6 +305,6 @@ def train_final_model(train_dfs, params, device, num_epochs=30, num_workers=2,
 
     raw = model.module if hasattr(model, 'module') else model
     torch.save(raw.state_dict(), save_path)
-    print(f"Modello salvato in {save_path}")
+    print(f"Model saved to {save_path}")
 
     return model, dataset, criterion

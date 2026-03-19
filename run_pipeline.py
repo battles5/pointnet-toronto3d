@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Pipeline completa: GridSearch → Cross-Validation → Training finale → Valutazione.
+"""Full pipeline: GridSearch → Cross-Validation → Final Training → Evaluation.
 
-Esegue l'intero workflow ML e salva modelli, risultati e plot in results/.
+Runs the entire ML workflow and saves models, results and plots to results/.
 """
 
 import os
@@ -31,21 +31,21 @@ from src.utils import (
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Pipeline ML PointNet su Toronto-3D')
+    parser = argparse.ArgumentParser(description='PointNet ML pipeline on Toronto-3D')
     parser.add_argument('--data-dir', default='data/toronto3d',
-                        help='Cartella con i file PLY')
+                        help='Folder containing PLY files')
     parser.add_argument('--results-dir', default='results',
-                        help='Cartella di output')
+                        help='Output folder')
     parser.add_argument('--gs-epochs', type=int, default=5,
-                        help='Epoche per GridSearch')
+                        help='Epochs for GridSearch')
     parser.add_argument('--cv-epochs', type=int, default=30,
-                        help='Epoche per Cross-Validation')
+                        help='Epochs for Cross-Validation')
     parser.add_argument('--final-epochs', type=int, default=30,
-                        help='Epoche per il training finale')
+                        help='Epochs for final training')
     parser.add_argument('--k-folds', type=int, default=5,
-                        help='Numero di fold per CV')
+                        help='Number of folds for CV')
     parser.add_argument('--num-workers', type=int, default=2,
-                        help='Workers per DataLoader')
+                        help='Workers for DataLoader')
     args = parser.parse_args()
 
     os.makedirs(args.results_dir, exist_ok=True)
@@ -54,18 +54,18 @@ def main():
     if torch.cuda.is_available():
         print(f"GPU: {torch.cuda.get_device_name(0)}")
 
-    # ── Caricamento dati ─────────────────────────────────────────
+    # ── Data loading ─────────────────────────────────────────
     print("\n" + "="*60)
-    print("CARICAMENTO DATI")
+    print("DATA LOADING")
     print("="*60)
 
     areas = {}
     for area_name in ['L001', 'L002', 'L003', 'L004']:
         filepath = os.path.join(args.data_dir, f'{area_name}.ply')
         if os.path.exists(filepath):
-            print(f"  Caricamento {area_name}...")
+            print(f"  Loading {area_name}...")
             areas[area_name] = load_toronto3d_ply(filepath)
-            print(f"    {len(areas[area_name]):,} punti")
+            print(f"    {len(areas[area_name]):,} points")
 
     train_area_names = ['L001', 'L002', 'L004']
     test_area_name = 'L003'
@@ -74,15 +74,15 @@ def main():
     test_df = areas.get(test_area_name)
 
     if not train_dfs:
-        print("ERRORE: nessun file di training trovato!")
+        print("ERROR: no training files found!")
         return
     if test_df is None:
-        print("ERRORE: file di test (L003) non trovato!")
+        print("ERROR: test file (L003) not found!")
         return
 
     print(f"\nTraining: {' + '.join(a for a in train_area_names if a in areas)}"
-          f" ({sum(len(d) for d in train_dfs):,} punti)")
-    print(f"Test: {test_area_name} ({len(test_df):,} punti)")
+          f" ({sum(len(d) for d in train_dfs):,} points)")
+    print(f"Test: {test_area_name} ({len(test_df):,} points)")
 
     # ── GridSearch ───────────────────────────────────────────────
     print("\n" + "="*60)
@@ -98,8 +98,8 @@ def main():
     n_combos = 1
     for v in param_grid.values():
         n_combos *= len(v)
-    print(f"Combinazioni: {n_combos}")
-    print(f"Epoche per combinazione: {args.gs_epochs}\n")
+    print(f"Combinations: {n_combos}")
+    print(f"Epochs per combination: {args.gs_epochs}\n")
 
     best_params, grid_results = grid_search(
         train_dfs, param_grid, device,
@@ -107,7 +107,7 @@ def main():
     )
 
     results_df = pd.DataFrame(grid_results)
-    print("\nRisultati GridSearch (ordinati per mIoU):")
+    print("\nGridSearch results (sorted by mIoU):")
     print(results_df.sort_values('val_miou', ascending=False).to_string(index=False))
     results_df.to_csv(
         os.path.join(args.results_dir, 'gridsearch_results.csv'), index=False
@@ -117,7 +117,7 @@ def main():
     print("\n" + "="*60)
     print(f"{args.k_folds}-FOLD CROSS-VALIDATION")
     print("="*60)
-    print(f"Migliori parametri: {best_params}")
+    print(f"Best parameters: {best_params}")
 
     cv_results = cross_validate(
         train_dfs, best_params, device,
@@ -133,9 +133,9 @@ def main():
         save_path=os.path.join(args.results_dir, 'cv_learning_curves.png'),
     )
 
-    # ── Training finale ──────────────────────────────────────────
+    # ── Final training ──────────────────────────────────────────
     print("\n" + "="*60)
-    print("TRAINING FINALE")
+    print("FINAL TRAINING")
     print("="*60)
 
     model_path = os.path.join(args.results_dir, 'best_model_final.pth')
@@ -145,9 +145,9 @@ def main():
         save_path=model_path,
     )
 
-    # ── Valutazione sul test set ─────────────────────────────────
+    # ── Test set evaluation ─────────────────────────────────
     print("\n" + "="*60)
-    print("VALUTAZIONE SUL TEST SET (L003)")
+    print("TEST SET EVALUATION (L003)")
     print("="*60)
 
     test_dataset = Toronto3DDataset(
@@ -158,7 +158,7 @@ def main():
         test_dataset, batch_size=best_params['batch_size'],
         shuffle=False, num_workers=args.num_workers,
     )
-    print(f"Blocchi nel test set: {len(test_dataset)}")
+    print(f"Test set blocks: {len(test_dataset)}")
 
     test_loss, test_acc, test_miou, test_ious, test_preds, test_labels = evaluate(
         final_model, test_loader, criterion, device,
@@ -167,7 +167,7 @@ def main():
     print_test_results(test_acc, test_miou, test_ious, test_labels, test_preds)
 
     # ── Plot dei risultati ───────────────────────────────────────
-    print("\nGenerazione plot dei risultati...")
+    print("\nGenerating result plots...")
 
     plot_confusion_matrix(
         test_labels, test_preds,
@@ -178,7 +178,7 @@ def main():
         save_path=os.path.join(args.results_dir, 'iou_per_class.png'),
     )
 
-    # Predizione vs GT su un blocco
+    # Prediction vs GT on a block
     sample_points, sample_labels = test_dataset[0]
     sample_dev = sample_points.unsqueeze(0).to(device)
     final_model.eval()
@@ -191,9 +191,9 @@ def main():
         save_path=os.path.join(args.results_dir, 'prediction_comparison.png'),
     )
 
-    # ── Riepilogo finale ─────────────────────────────────────────
+    # ── Final summary ─────────────────────────────────────────
     print("\n" + "="*60)
-    print("RIEPILOGO")
+    print("SUMMARY")
     print("="*60)
     print(f"  Overall Accuracy: {test_acc:.4f}")
     print(f"  Mean IoU:         {test_miou:.4f}")

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Pipeline v2 — PointNet migliorato su Toronto-3D.
+"""Pipeline v2 — Improved PointNet on Toronto-3D.
 
-Versione ottimizzata con:
+Optimized version with:
   1. Data augmentation (rotazione Z, jitter, scaling)
-  2. Focal Loss (γ=2) per class imbalance  →  sostituita con CrossEntropyLoss pesata
+  2. Focal Loss (γ=2) for class imbalance  →  replaced with weighted CrossEntropyLoss
   3. CosineAnnealingWarmRestarts + Early Stopping
   4. Blocchi 20×20 m con 4096+ punti
   5. Mixed Precision (AMP) per 2× throughput
@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-torch.backends.cudnn.benchmark = True  # ottimizza convoluzioni per input size fisso
+torch.backends.cudnn.benchmark = True  # optimize convolutions for fixed input size
 
 from torch.utils.data import DataLoader
 
@@ -46,16 +46,16 @@ from src.utils import (
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Pipeline v2 — PointNet migliorato su Toronto-3D',
+        description='Pipeline v2 — Improved PointNet on Toronto-3D',
     )
     parser.add_argument('--data-dir', default='data/toronto3d')
     parser.add_argument('--results-dir', default='results_v2')
     parser.add_argument('--gs-epochs', type=int, default=10,
-                        help='Epoche per GridSearch')
+                        help='Epochs for GridSearch')
     parser.add_argument('--cv-epochs', type=int, default=100,
-                        help='Epoche max per Cross-Validation (con early stopping)')
+                        help='Max epochs for Cross-Validation (with early stopping)')
     parser.add_argument('--final-epochs', type=int, default=100,
-                        help='Epoche per il training finale')
+                        help='Epochs for final training')
     parser.add_argument('--k-folds', type=int, default=5)
     parser.add_argument('--num-workers', type=int, default=8)
     args = parser.parse_args()
@@ -67,21 +67,21 @@ def main():
         for i in range(torch.cuda.device_count()):
             print(f"GPU {i}: {torch.cuda.get_device_name(i)} "
                   f"({torch.cuda.get_device_properties(i).total_memory / 1e9:.1f} GB)")
-    print(f"AMP (Mixed Precision): abilitato")
-    print(f"cuDNN benchmark: abilitato")
+    print(f"AMP (Mixed Precision): enabled")
+    print(f"cuDNN benchmark: enabled")
 
-    # ── Caricamento dati ─────────────────────────────────────────
+    # ── Data loading ─────────────────────────────────────────
     print("\n" + "=" * 60)
-    print("CARICAMENTO DATI")
+    print("DATA LOADING")
     print("=" * 60)
 
     areas = {}
     for area_name in ['L001', 'L002', 'L003', 'L004']:
         filepath = os.path.join(args.data_dir, f'{area_name}.ply')
         if os.path.exists(filepath):
-            print(f"  Caricamento {area_name}...")
+            print(f"  Loading {area_name}...")
             areas[area_name] = load_toronto3d_ply(filepath)
-            print(f"    {len(areas[area_name]):,} punti")
+            print(f"    {len(areas[area_name]):,} points")
 
     train_area_names = ['L001', 'L002', 'L004']
     test_area_name = 'L003'
@@ -89,21 +89,21 @@ def main():
     test_df = areas.get(test_area_name)
 
     if not train_dfs or test_df is None:
-        print("ERRORE: file di training o test mancanti!")
+        print("ERROR: training or test files missing!")
         return
 
     print(f"\nTraining: {' + '.join(a for a in train_area_names if a in areas)}"
-          f" ({sum(len(d) for d in train_dfs):,} punti)")
-    print(f"Test: {test_area_name} ({len(test_df):,} punti)")
+          f" ({sum(len(d) for d in train_dfs):,} points)")
+    print(f"Test: {test_area_name} ({len(test_df):,} points)")
 
     # ── Miglioramenti v2 ─────────────────────────────────────────
     print("\n" + "=" * 60)
-    print("MIGLIORAMENTI v2")
+    print("V2 IMPROVEMENTS")
     print("=" * 60)
     print("  [1] Data augmentation: rotazione Z, jitter, scaling")
     print("  [2] CrossEntropyLoss pesata (inverse sqrt) per class imbalance")
     print("  [3] CosineAnnealingWarmRestarts + Early Stopping (patience=15)")
-    print("  [4] Blocchi 20×20 m (stride 10 m), ≥4096 punti")
+    print("  [4] Blocchi 20×20 m (stride 10 m), ≥4096 points")
     print("  [5] AMP mixed precision + AdamW")
 
     # ── GridSearch ───────────────────────────────────────────────
@@ -120,8 +120,8 @@ def main():
     n_combos = 1
     for v in param_grid.values():
         n_combos *= len(v)
-    print(f"Combinazioni: {n_combos}")
-    print(f"Epoche per combinazione: {args.gs_epochs}")
+    print(f"Combinations: {n_combos}")
+    print(f"Epochs per combination: {args.gs_epochs}")
     print(f"Blocchi: 20×20 m, stride 10 m")
     print(f"Loss: CrossEntropyLoss pesata\n")
 
@@ -131,22 +131,22 @@ def main():
     )
 
     results_df = pd.DataFrame(grid_results)
-    print("\nRisultati GridSearch v2 (ordinati per mIoU):")
+    print("\nGridSearch v2 results (sorted by mIoU):")
     print(results_df.sort_values('val_miou', ascending=False).to_string(index=False))
     results_df.to_csv(
         os.path.join(args.results_dir, 'gridsearch_v2_results.csv'), index=False,
     )
-    # Salva checkpoint GS
+    # Save GS checkpoint
     with open(os.path.join(args.results_dir, '_checkpoint.json'), 'w') as f:
         json.dump({'stage': 'gridsearch_done', 'best_params': best_params}, f)
-    print(f"[CHECKPOINT] GridSearch completato — best_params salvati")
+    print(f"[CHECKPOINT] GridSearch completed — best_params saved")
 
     # ── Cross-Validation ─────────────────────────────────────────
     print("\n" + "=" * 60)
     print(f"{args.k_folds}-FOLD CROSS-VALIDATION v2")
     print("=" * 60)
-    print(f"Migliori parametri: {best_params}")
-    print(f"Max epoche: {args.cv_epochs} (con early stopping, patience=15)")
+    print(f"Best parameters: {best_params}")
+    print(f"Max epochs: {args.cv_epochs} (with early stopping, patience=15)")
 
     cv_results = cross_validate(
         train_dfs, best_params, device,
@@ -157,7 +157,7 @@ def main():
     mious = [r['best_miou'] for r in cv_results if r['best_miou'] > 0]
     epochs_trained = [r['epochs_trained'] for r in cv_results if r['epochs_trained'] > 0]
     print(f"\nCV Summary v2 — Mean mIoU: {np.mean(mious):.4f} ± {np.std(mious):.4f}")
-    print(f"Epoche medie per fold: {np.mean(epochs_trained):.0f}")
+    print(f"Avg epochs per fold: {np.mean(epochs_trained):.0f}")
 
     try:
         plot_cv_learning_curves(
@@ -165,20 +165,20 @@ def main():
             save_path=os.path.join(args.results_dir, 'cv_learning_curves_v2.png'),
         )
     except Exception as e:
-        print(f"[WARNING] Plot CV learning curves fallito: {e}")
+        print(f"[WARNING] CV learning curves plot failed: {e}")
 
-    # Salva checkpoint CV
+    # Save CV checkpoint
     with open(os.path.join(args.results_dir, '_checkpoint.json'), 'w') as f:
         json.dump({
             'stage': 'cv_done', 'best_params': best_params,
             'cv_mean_miou': float(np.mean(mious)),
             'cv_std_miou': float(np.std(mious)),
         }, f)
-    print(f"[CHECKPOINT] Cross-Validation completata")
+    print(f"[CHECKPOINT] Cross-Validation completed")
 
-    # ── Training finale ──────────────────────────────────────────
+    # ── Final training ──────────────────────────────────────────
     print("\n" + "=" * 60)
-    print("TRAINING FINALE v2")
+    print("FINAL TRAINING v2")
     print("=" * 60)
 
     model_path = os.path.join(args.results_dir, 'best_model_v2_final.pth')
@@ -188,9 +188,9 @@ def main():
         save_path=model_path,
     )
 
-    # ── Valutazione test set ─────────────────────────────────────
+    # ── Test set evaluation ─────────────────────────────────────
     print("\n" + "=" * 60)
-    print("VALUTAZIONE SUL TEST SET (L003) — v2")
+    print("TEST SET EVALUATION (L003) — v2")
     print("=" * 60)
 
     try:
@@ -204,7 +204,7 @@ def main():
             shuffle=False, num_workers=args.num_workers,
             pin_memory=True,
         )
-        print(f"Blocchi nel test set: {len(test_dataset)}")
+        print(f"Test set blocks: {len(test_dataset)}")
 
         test_loss, test_acc, test_miou, test_ious, test_preds, test_labels = evaluate(
             final_model, test_loader, criterion, device,
@@ -213,7 +213,7 @@ def main():
         print_test_results(test_acc, test_miou, test_ious, test_labels, test_preds)
 
         # ── Plot ─────────────────────────────────────────────────────
-        print("\nGenerazione plot v2...")
+        print("\nGenerating v2 plots...")
 
         plot_confusion_matrix(
             test_labels, test_preds,
@@ -236,9 +236,9 @@ def main():
             save_path=os.path.join(args.results_dir, 'prediction_comparison_v2.png'),
         )
 
-        # ── Confronto v1 vs v2 ───────────────────────────────────────
+        # ── V1 vs V2 comparison ───────────────────────────────────────
         print("\n" + "=" * 60)
-        print("CONFRONTO v1 vs v2")
+        print("V1 vs V2 COMPARISON")
         print("=" * 60)
 
         v1_results_path = os.path.join('results', 'gridsearch_results.csv')
@@ -251,20 +251,20 @@ def main():
         print(f"  v2 — Test Accuracy:   {test_acc:.4f}")
         print(f"  v2 — Test mIoU:       {test_miou:.4f}")
 
-        # ── Riepilogo ────────────────────────────────────────────────
+        # ── Summary ────────────────────────────────────────────────
         print("\n" + "=" * 60)
-        print("RIEPILOGO v2")
+        print("SUMMARY v2")
         print("=" * 60)
         print(f"  Overall Accuracy: {test_acc:.4f}")
         print(f"  Mean IoU:         {test_miou:.4f}")
         print(f"  CV mIoU:          {np.mean(mious):.4f} ± {np.std(mious):.4f}")
-        print(f"  Modello salvato:  {model_path}")
-        print(f"  Risultati in:     {args.results_dir}/")
+        print(f"  Model saved to:   {model_path}")
+        print(f"  Results in:       {args.results_dir}/")
 
     except Exception as e:
-        print(f"\n[ERRORE] Test/plot fallito: {e}")
+        print(f"\n[ERROR] Test/plot failed: {e}")
         traceback.print_exc()
-        print("Il modello finale è comunque salvato in:", model_path)
+        print("The final model is still saved at:", model_path)
 
 
 if __name__ == '__main__':
@@ -272,9 +272,9 @@ if __name__ == '__main__':
         main()
     except Exception as e:
         print(f"\n{'='*60}")
-        print(f"CRASH DELLA PIPELINE: {e}")
+        print(f"PIPELINE CRASH: {e}")
         print(f"{'='*60}")
         traceback.print_exc()
-        print("\nControlla results_v2/_checkpoint.json per lo stato raggiunto.")
-        print("I risultati parziali (modelli, CSV) sono salvati in results_v2/.")
+        print("\nCheck results_v2/_checkpoint.json for reached state.")
+        print("Partial results (models, CSV) are saved in results_v2/.")
         sys.exit(1)

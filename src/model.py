@@ -1,4 +1,4 @@
-"""PointNet per segmentazione semantica di point cloud (PyTorch)."""
+"""PointNet for semantic segmentation of point clouds (PyTorch)."""
 
 import torch
 import torch.nn as nn
@@ -8,8 +8,8 @@ import torch.nn.functional as F
 class TNet(nn.Module):
     """Transformation Network (T-Net).
 
-    Impara una matrice di trasformazione affine kxk per allineare
-    i punti (o le features) in uno spazio canonico.
+    Learns a k×k affine transformation matrix to align
+    points (or features) into a canonical space.
     """
 
     def __init__(self, k=3):
@@ -40,7 +40,7 @@ class TNet(nn.Module):
         x = F.relu(self.bn5(self.fc2(x)))
         x = self.fc3(x)
 
-        # Inizializza come matrice identità
+        # Initialize as identity matrix
         identity = (
             torch.eye(self.k, device=x.device)
             .flatten()
@@ -53,16 +53,16 @@ class TNet(nn.Module):
 
 
 class PointNetSegmentation(nn.Module):
-    """PointNet per segmentazione semantica di point cloud.
+    """PointNet for semantic segmentation of point clouds.
 
-    Architettura:
-    1. Input Transform (T-Net kxk)
+    Architecture:
+    1. Input Transform (T-Net k×k)
     2. Shared MLP (64, 64)
-    3. Feature Transform (T-Net 64x64)
+    3. Feature Transform (T-Net 64×64)
     4. Shared MLP (64, 128, 1024)
     5. Global feature (max pooling)
-    6. Concatenazione feature locali + globali
-    7. MLP per classificazione per-punto
+    6. Concatenation of local + global features
+    7. MLP for per-point classification
     """
 
     def __init__(self, num_features=7, num_classes=9):
@@ -106,11 +106,11 @@ class PointNetSegmentation(nn.Module):
             x: (batch, num_points, num_features)
         Returns:
             out: (batch, num_points, num_classes)
-            feat_transform: matrice di trasformazione delle features
+            feat_transform: feature transformation matrix
         """
         batch_size, num_points, _ = x.size()
 
-        # (batch, features, points) per Conv1d
+        # (batch, features, points) for Conv1d
         x = x.transpose(2, 1)
 
         # Input transform
@@ -124,7 +124,7 @@ class PointNetSegmentation(nn.Module):
         # Feature transform
         feat_t = self.feature_transform(x)
         x = torch.bmm(feat_t, x)
-        local_features = x  # Salva per concatenazione
+        local_features = x  # Save for concatenation
 
         # Shared MLP 2
         x = F.relu(self.bn3(self.conv3(x)))
@@ -135,7 +135,7 @@ class PointNetSegmentation(nn.Module):
         global_feature = torch.max(x, 2)[0]  # (batch, 1024)
         global_feature = global_feature.unsqueeze(2).repeat(1, 1, num_points)
 
-        # Concatena local + global
+        # Concatenate local + global
         x = torch.cat([local_features, global_feature], dim=1)
 
         # Segmentation head
@@ -151,8 +151,8 @@ class PointNetSegmentation(nn.Module):
 
 
 def pointnet_regularization_loss(feat_transform):
-    """Regularizzazione: la matrice di trasformazione delle features
-    deve essere quasi ortogonale (A * A^T ≈ I)."""
+    """Regularization: the feature transformation matrix
+    should be approximately orthogonal (A * A^T ≈ I)."""
     batch_size = feat_transform.size(0)
     k = feat_transform.size(1)
     identity = torch.eye(k, device=feat_transform.device).unsqueeze(0)

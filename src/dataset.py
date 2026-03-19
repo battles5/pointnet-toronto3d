@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 from plyfile import PlyData
 
 
-# Mapping classi Toronto-3D
+# Toronto-3D class mapping
 CLASS_NAMES = {
     0: 'Unclassified',
     1: 'Road',
@@ -24,28 +24,28 @@ NUM_CLASSES = 9
 
 
 def _resolve_field(names, candidates):
-    """Ritorna il primo campo presente tra i candidati, o None."""
+    """Return the first field present among the candidates, or None."""
     for c in candidates:
         if c in names:
             return c
     return None
 
 
-# Offset UTM consigliato dal paper per evitare perdita di precisione
+# UTM offset recommended by the paper to avoid precision loss
 UTM_OFFSET = np.array([627285.0, 4841948.0, 0.0])
 
 
 def load_toronto3d_ply(filepath):
-    """Carica un file PLY del dataset Toronto-3D e ritorna un DataFrame.
+    """Load a Toronto-3D PLY file and return a DataFrame.
 
-    Il DataFrame contiene: x, y, z, r, g, b, intensity, gps_time, label.
-    Le coordinate UTM vengono riscalate sottraendo UTM_OFFSET.
+    The DataFrame contains: x, y, z, r, g, b, intensity, gps_time, label.
+    UTM coordinates are rescaled by subtracting UTM_OFFSET.
     """
     plydata = PlyData.read(filepath)
     vertex = plydata['vertex']
     names = vertex.data.dtype.names
 
-    # Coordinate — sottrai offset UTM per mantenere la precisione float
+    # Coordinates — subtract UTM offset to preserve float precision
     data = {
         'x': np.array(vertex['x'], dtype=np.float64) - UTM_OFFSET[0],
         'y': np.array(vertex['y'], dtype=np.float64) - UTM_OFFSET[1],
@@ -55,7 +55,7 @@ def load_toronto3d_ply(filepath):
         'b': np.array(vertex['blue'], dtype=np.float32),
     }
 
-    # Intensity — il nome cambia tra versioni del file
+    # Intensity — field name varies across file versions
     int_field = _resolve_field(names, ('intensity', 'scalar_Intensity'))
     if int_field:
         data['intensity'] = np.array(vertex[int_field], dtype=np.float32)
@@ -71,7 +71,7 @@ def load_toronto3d_ply(filepath):
     label_field = _resolve_field(names, ('scalar_Label', 'label', 'classification'))
     if label_field is None:
         raise ValueError(
-            f"Campo label non trovato nel file PLY. Campi disponibili: {names}"
+            f"Label field not found in PLY file. Available fields: {names}"
         )
     data['label'] = np.array(vertex[label_field], dtype=np.int64)
 
@@ -79,8 +79,8 @@ def load_toronto3d_ply(filepath):
 
 
 class Toronto3DDataset(Dataset):
-    """Dataset per PointNet: suddivide le point cloud in blocchi spaziali
-    e campiona un numero fisso di punti per blocco."""
+    """Dataset for PointNet: splits point clouds into spatial blocks
+    and samples a fixed number of points per block."""
 
     def __init__(
         self,
@@ -94,13 +94,13 @@ class Toronto3DDataset(Dataset):
     ):
         """
         Args:
-            dataframes: lista di DataFrame (una per area).
-            num_points: punti per blocco.
-            num_classes: numero di classi.
-            features: colonne da usare come input (default: x,y,z,intensity,r,g,b).
-            block_size: dimensione del blocco spaziale in metri.
-            stride: passo tra blocchi.
-            normalize: se normalizzare coordinate, intensity e RGB.
+            dataframes: list of DataFrames (one per area).
+            num_points: points per block.
+            num_classes: number of classes.
+            features: columns to use as input (default: x,y,z,intensity,r,g,b).
+            block_size: spatial block size in meters.
+            stride: step between blocks.
+            normalize: whether to normalize coordinates, intensity and RGB.
         """
         if features is None:
             features = ['x', 'y', 'z', 'intensity', 'r', 'g', 'b']
@@ -115,7 +115,7 @@ class Toronto3DDataset(Dataset):
             self._create_blocks(df, block_size, stride, normalize)
 
     def _create_blocks(self, df, block_size, stride, normalize):
-        """Suddivide la point cloud in blocchi spaziali."""
+        """Split the point cloud into spatial blocks."""
         coords = df[['x', 'y']].values
         x_min, y_min = coords.min(axis=0)
         x_max, y_max = coords.max(axis=0)
@@ -138,17 +138,17 @@ class Toronto3DDataset(Dataset):
                 labels = block_df['label'].values.astype(np.int64)
 
                 if normalize:
-                    # Normalizza coordinate rispetto al centro del blocco
+                    # Normalize coordinates relative to block center
                     points[:, 0] -= (x_start + block_size / 2)
                     points[:, 1] -= (y_start + block_size / 2)
                     points[:, 2] -= points[:, 2].mean()
-                    # Normalizza intensity in [0, 1]
+                    # Normalize intensity to [0, 1]
                     if 'intensity' in self.features:
                         idx = self.features.index('intensity')
                         max_val = points[:, idx].max()
                         if max_val > 0:
                             points[:, idx] /= max_val
-                    # Normalizza RGB in [0, 1]
+                    # Normalize RGB to [0, 1]
                     for ch in ('r', 'g', 'b'):
                         if ch in self.features:
                             idx = self.features.index(ch)
@@ -165,7 +165,7 @@ class Toronto3DDataset(Dataset):
         points = self.blocks[idx]
         labels = self.labels[idx]
 
-        # Campiona o padda a num_points
+        # Sample or pad to num_points
         n = len(points)
         if n >= self.num_points:
             choice = np.random.choice(n, self.num_points, replace=False)

@@ -1,12 +1,12 @@
 """Training v2 — Cosine Annealing, Early Stopping, Mixed Precision.
 
-Miglioramenti rispetto a v1:
-  1. CrossEntropyLoss pesata (inverse sqrt) per class imbalance
+Improvements over v1:
+  1. Weighted CrossEntropyLoss (inverse sqrt) for class imbalance
   2. CosineAnnealingWarmRestarts scheduler
-  3. Early stopping su mIoU (patience=15)
-  4. AMP (Automatic Mixed Precision) per 2× throughput sulle L40S
-  5. AdamW con weight decay
-  6. pin_memory + più workers per I/O ottimale
+  3. Early stopping on mIoU (patience=15)
+  4. AMP (Automatic Mixed Precision) for 2× throughput on L40S
+  5. AdamW with weight decay
+  6. pin_memory + more workers for optimal I/O
 """
 
 import os
@@ -31,8 +31,8 @@ class FocalLoss(nn.Module):
 
     FL(p_t) = -α_t · (1 - p_t)^γ · log(p_t)
 
-    Riduce il contributo degli esempi facili e concentra il training
-    sugli hard examples — efficace con class imbalance estremo.
+    Reduces the contribution of easy examples and focuses training
+    on hard examples — effective with extreme class imbalance.
     """
 
     def __init__(self, weight=None, gamma=2.0, reduction='mean'):
@@ -61,7 +61,7 @@ class FocalLoss(nn.Module):
 # ── Early Stopping ───────────────────────────────────────────────
 
 class EarlyStopping:
-    """Early stopping che monitora mIoU (maximize)."""
+    """Early stopping that monitors mIoU (maximize)."""
 
     def __init__(self, patience=15, min_delta=0.001):
         self.patience = patience
@@ -82,7 +82,7 @@ class EarlyStopping:
             self.counter = 0
 
 
-# ── Utilità ──────────────────────────────────────────────────────
+# ── Utilities ────────────────────────────────────────────────────
 
 def get_device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -90,7 +90,7 @@ def get_device():
 
 def _wrap_model(model):
     if torch.cuda.device_count() > 1:
-        print(f"  Usando {torch.cuda.device_count()} GPU con DataParallel")
+        print(f"  Using {torch.cuda.device_count()} GPUs with DataParallel")
         model = nn.DataParallel(model)
     return model
 
@@ -102,7 +102,7 @@ def compute_class_weights(dataset, indices=None, num_classes=NUM_CLASSES):
         all_labels = np.concatenate(dataset.labels)
     counts = np.bincount(all_labels, minlength=num_classes).astype(np.float32)
     counts = np.maximum(counts, 1.0)
-    # Inverse square root — meno aggressivo di 1/count, più stabile
+    # Inverse square root — less aggressive than 1/count, more stable
     weights = 1.0 / np.sqrt(counts)
     weights /= weights.sum()
     return weights
@@ -112,7 +112,7 @@ def compute_class_weights(dataset, indices=None, num_classes=NUM_CLASSES):
 
 def train_one_epoch(model, dataloader, optimizer, criterion, device,
                     scaler, reg_weight=0.001):
-    """Epoca di training con AMP (mixed precision) e gradient clipping."""
+    """Training epoch with AMP (mixed precision) and gradient clipping."""
     model.train()
     total_loss = 0.0
     correct = 0
@@ -131,13 +131,13 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device,
             loss = criterion(predictions_flat, labels_flat)
             loss = loss + reg_weight * pointnet_regularization_loss(feat_t)
 
-        # Controlla NaN/Inf — salta il batch se loss diverge
+        # Check NaN/Inf — skip the batch if loss diverges
         if not torch.isfinite(loss):
             optimizer.zero_grad(set_to_none=True)
             continue
 
         scaler.scale(loss).backward()
-        # Gradient clipping per stabilità con Focal Loss + AMP
+        # Gradient clipping for stability with Focal Loss + AMP
         scaler.unscale_(optimizer)
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         scaler.step(optimizer)
@@ -192,7 +192,7 @@ def evaluate(model, dataloader, criterion, device, num_classes=NUM_CLASSES):
 # ── GridSearch ───────────────────────────────────────────────────
 
 def grid_search(train_dfs, param_grid, device, num_epochs=10, num_workers=8):
-    """GridSearch v2 con Focal Loss e AMP."""
+    """GridSearch v2 with Focal Loss and AMP."""
     best_params = None
     best_val_miou = 0.0
     results = []
@@ -238,7 +238,7 @@ def grid_search(train_dfs, param_grid, device, num_epochs=10, num_workers=8):
                 weight=torch.FloatTensor(weights).to(device),
             )
 
-            # Disattiva augmentation per la validazione GS
+            # Disable augmentation for GS validation
             for epoch in range(num_epochs):
                 dataset.augment = True
                 train_one_epoch(model, train_loader, optimizer, criterion, device, scaler)
@@ -258,7 +258,7 @@ def grid_search(train_dfs, param_grid, device, num_epochs=10, num_workers=8):
 
         except RuntimeError as e:
             if 'out of memory' in str(e).lower():
-                print(f"  OOM con {params} — skip")
+                print(f"  OOM with {params} — skip")
                 torch.cuda.empty_cache()
                 results.append({**params, 'val_acc': 0, 'val_miou': 0, 'val_loss': float('inf')})
                 continue
@@ -272,7 +272,7 @@ def grid_search(train_dfs, param_grid, device, num_epochs=10, num_workers=8):
 
 def cross_validate(train_dfs, params, device, k=5, num_epochs=100,
                    num_workers=8, save_dir='results_v2'):
-    """CV v2 con Focal Loss, CosineAnnealingWarmRestarts, Early Stopping, AMP."""
+    """CV v2 with Focal Loss, CosineAnnealingWarmRestarts, Early Stopping, AMP."""
     os.makedirs(save_dir, exist_ok=True)
     scaler = GradScaler()
 
@@ -309,7 +309,7 @@ def cross_validate(train_dfs, params, device, k=5, num_epochs=100,
             optimizer = torch.optim.AdamW(
                 model.parameters(), lr=params['learning_rate'], weight_decay=1e-4,
             )
-            # Cosine annealing: T_0=20, poi 40, poi 80 (warm restarts)
+            # Cosine annealing: T_0=20, then 40, then 80 (warm restarts)
             scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
                 optimizer, T_0=20, T_mult=2, eta_min=1e-6,
             )
@@ -369,7 +369,7 @@ def cross_validate(train_dfs, params, device, k=5, num_epochs=100,
                   f"({len(train_losses)} epochs)")
 
         except RuntimeError as e:
-            print(f"  ERRORE nel fold {fold + 1}: {e}")
+            print(f"  ERROR in fold {fold + 1}: {e}")
             torch.cuda.empty_cache()
             cv_results.append({
                 'fold': fold + 1, 'best_miou': 0.0,
@@ -382,15 +382,15 @@ def cross_validate(train_dfs, params, device, k=5, num_epochs=100,
     if mious:
         print(f"\nCV Results — Mean mIoU: {np.mean(mious):.4f} ± {np.std(mious):.4f}")
     else:
-        print("\nCV Results — Tutti i fold falliti!")
+        print("\nCV Results — All folds failed!")
     return cv_results
 
 
-# ── Training finale ──────────────────────────────────────────────
+# ── Final Training ───────────────────────────────────────────────
 
 def train_final_model(train_dfs, params, device, num_epochs=100, num_workers=8,
                       save_path='results_v2/best_model_v2_final.pth'):
-    """Training finale v2 con tutti i miglioramenti."""
+    """Final v2 training with all improvements."""
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     scaler = GradScaler()
 
@@ -432,6 +432,6 @@ def train_final_model(train_dfs, params, device, num_epochs=100, num_workers=8,
 
     raw = model.module if hasattr(model, 'module') else model
     torch.save(raw.state_dict(), save_path)
-    print(f"Modello salvato in {save_path}")
+    print(f"Model saved to {save_path}")
 
     return model, dataset, criterion

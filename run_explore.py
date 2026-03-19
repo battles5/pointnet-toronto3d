@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Data exploration e visualizzazione del dataset Toronto-3D.
+"""Data exploration and visualization of the Toronto-3D dataset.
 
-Genera tutti i plot di EDA e li salva in results/.
+Generates all EDA plots and saves them to results/.
 """
 
 import os
@@ -19,55 +19,55 @@ from src.utils import (
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Esplorazione dati Toronto-3D')
+    parser = argparse.ArgumentParser(description='Toronto-3D data exploration')
     parser.add_argument('--data-dir', default='data/toronto3d',
-                        help='Cartella con i file PLY')
+                        help='Folder containing PLY files')
     parser.add_argument('--results-dir', default='results',
-                        help='Cartella di output per i plot')
+                        help='Output folder for plots')
     parser.add_argument('--max-points', type=int, default=100_000,
-                        help='Punti massimi per visualizzazione')
+                        help='Max points for visualization')
     args = parser.parse_args()
 
     os.makedirs(args.results_dir, exist_ok=True)
 
-    # ── Caricamento ──────────────────────────────────────────────
+    # ── Loading ──────────────────────────────────────────────
     areas = {}
     for area_name in ['L001', 'L002', 'L003', 'L004']:
         filepath = os.path.join(args.data_dir, f'{area_name}.ply')
         if os.path.exists(filepath):
-            print(f"Caricamento {area_name}...")
+            print(f"Loading {area_name}...")
             areas[area_name] = load_toronto3d_ply(filepath)
-            print(f"  {area_name}: {len(areas[area_name]):,} punti, "
-                  f"colonne: {list(areas[area_name].columns)}")
+            print(f"  {area_name}: {len(areas[area_name]):,} points, "
+                  f"columns: {list(areas[area_name].columns)}")
         else:
-            print(f"  ⚠ {area_name}: file non trovato")
+            print(f"  ⚠ {area_name}: file not found")
 
     if not areas:
-        print("Nessun file PLY trovato! Scarica da: "
+        print("No PLY files found! Download from: "
               "https://github.com/WeikaiTan/Toronto-3D")
         return
 
     total = sum(len(df) for df in areas.values())
-    print(f"\nTotale punti caricati: {total:,}")
+    print(f"\nTotal points loaded: {total:,}")
 
-    # Usa la prima area per le visualizzazioni
+    # Use the first area for visualizations
     first_name = next(iter(areas))
     df = areas[first_name]
 
-    # ── Statistiche descrittive ──────────────────────────────────
+    # ── Descriptive statistics ──────────────────────────────────
     print(f"\n{'='*60}")
-    print(f"Statistiche area {first_name}")
+    print(f"Area {first_name} statistics")
     print(f"{'='*60}")
     print(f"Shape: {df.shape}")
-    print(f"\nTipi di dato:\n{df.dtypes}")
-    print(f"\nStatistiche descrittive:\n{df.describe()}")
+    print(f"\nData types:\n{df.dtypes}")
+    print(f"\nDescriptive statistics:\n{df.describe()}")
 
-    # ── Distribuzione classi (tutte le aree) ─────────────────────
+    # ── Class distribution (all areas) ─────────────────────────────
     import pandas as pd
     all_df = pd.concat(areas.values(), ignore_index=True)
 
     print(f"\n{'='*60}")
-    print("Distribuzione classi su tutto il dataset")
+    print("Class distribution across the entire dataset")
     print(f"{'='*60}")
     for cls_id, name in CLASS_NAMES.items():
         count = (all_df['label'] == cls_id).sum()
@@ -79,7 +79,7 @@ def main():
         save_path=os.path.join(args.results_dir, 'class_distribution.png'),
     )
 
-    # ── Visualizzazione 3D ───────────────────────────────────────
+    # ── 3D visualization ───────────────────────────────────────
     plot_pointcloud_3d(
         df, color_by='label', max_points=args.max_points,
         save_path=os.path.join(args.results_dir, 'pointcloud_3d_classes.png'),
@@ -97,13 +97,13 @@ def main():
         save_path=os.path.join(args.results_dir, 'feature_analysis.png'),
     )
 
-    # ── Matrice di correlazione ──────────────────────────────────
+    # ── Correlation matrix ──────────────────────────────────
     plot_correlation_matrix(
         df,
         save_path=os.path.join(args.results_dir, 'correlation_matrix.png'),
     )
 
-    print(f"\nPlot salvati in {args.results_dir}/")
+    print(f"\nPlots saved to {args.results_dir}/")
 
 
 if __name__ == '__main__':

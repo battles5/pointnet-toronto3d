@@ -1,9 +1,9 @@
-"""Toronto-3D Dataset v2 — blocchi più grandi + data augmentation on-the-fly.
+"""Toronto-3D Dataset v2 — larger blocks + on-the-fly data augmentation.
 
-Miglioramenti rispetto a v1:
-  1. Blocchi spaziali 20×20 m (stride 10 m) per più contesto
-  2. Data augmentation: rotazione Z, jitter, scaling
-  3. Riusa il loader PLY e le costanti da dataset.py
+Improvements over v1:
+  1. Spatial blocks 20×20 m (stride 10 m) for more context
+  2. Data augmentation: Z-rotation, jitter, scaling
+  3. Reuses PLY loader and constants from dataset.py
 """
 
 import numpy as np
@@ -14,7 +14,7 @@ from .dataset import load_toronto3d_ply, CLASS_NAMES, NUM_CLASSES  # noqa: F401
 
 
 class Toronto3DDatasetV2(Dataset):
-    """Dataset PointNet v2 con data augmentation e blocchi spaziali più grandi."""
+    """PointNet Dataset v2 with data augmentation and larger spatial blocks."""
 
     def __init__(
         self,
@@ -82,28 +82,28 @@ class Toronto3DDatasetV2(Dataset):
 
     @staticmethod
     def _augment_points(points):
-        """Data augmentation geometrica on-the-fly.
+        """Geometric data augmentation on-the-fly.
 
-        1. Rotazione casuale attorno all'asse Z (0–2π)
-        2. Jitter gaussiano su XYZ (σ=0.01, clip ±0.05)
-        3. Scaling uniforme casuale (0.9–1.1)
+        1. Random rotation around the Z-axis (0–2π)
+        2. Gaussian jitter on XYZ (σ=0.01, clip ±0.05)
+        3. Random uniform scaling (0.9–1.1)
         """
         pts = points.copy()
 
-        # Rotazione casuale attorno a Z
+        # Random rotation around Z
         theta = np.random.uniform(0, 2 * np.pi)
         cos_t, sin_t = np.cos(theta), np.sin(theta)
         rotation = np.array([[cos_t, -sin_t], [sin_t, cos_t]], dtype=np.float32)
         pts[:, :2] = pts[:, :2] @ rotation.T
 
-        # Jitter gaussiano su XYZ
+        # Gaussian jitter on XYZ
         jitter = np.clip(
             np.random.normal(0, 0.01, size=(pts.shape[0], 3)).astype(np.float32),
             -0.05, 0.05,
         )
         pts[:, :3] += jitter
 
-        # Scaling uniforme
+        # Uniform scaling
         scale = np.random.uniform(0.9, 1.1)
         pts[:, :3] *= scale
 
