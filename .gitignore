@@ -6,6 +6,9 @@ course_materials/
 results/*.pth
 results_v2/*.pth
 
+# Presentation (compiled locally)
+docs/presentation/
+
 # Python
 __pycache__/
 *.pyc
