@@ -3,24 +3,20 @@
 Detailed results for the PointNet semantic segmentation experiments on Toronto-3D.  
 Back to [README](README.md).
 
----
-
 ## Table of Contents
 
 - [Dataset Overview](#dataset-overview)
-- [V1 — Baseline Results](#v1--baseline-results)
+- [V1 (Baseline) Results](#v1--baseline-results)
   - [Grid Search](#v1-grid-search)
   - [Cross-Validation](#v1-cross-validation)
   - [Test Evaluation](#v1-test-evaluation)
   - [Analysis](#v1-analysis)
-- [V2 — Improved Results](#v2--improved-results)
+- [V2 (Improved) Results](#v2--improved-results)
   - [Grid Search](#v2-grid-search)
   - [Cross-Validation](#v2-cross-validation)
   - [Test Evaluation](#v2-test-evaluation)
   - [Analysis](#v2-analysis)
 - [V1 vs V2 Comparison](#v1-vs-v2-comparison)
-
----
 
 ## Dataset Overview
 
@@ -48,9 +44,7 @@ Back to [README](README.md).
 | Utility Line | 0.5% |
 | Road Marking | 0.5% |
 
----
-
-## V1 — Baseline Results
+## V1 (Baseline) Results
 
 **Configuration**: PointNet vanilla, CrossEntropyLoss (unweighted), StepLR (step=10, γ=0.5), 10×10m blocks (stride 5m), 2048 points/block, 30 epochs.
 
@@ -114,15 +108,13 @@ Evaluated on L003 (41M points, 505 blocks).
 ### V1 Analysis
 
 - **Natural** (0.41) and **Building** (0.36) achieve the highest IoU thanks to distinctive geometric and color features.
-- **Road** (0.12 IoU): very high precision (0.90) but extremely low recall (0.12) — the model is conservative, classifying as Road only when highly confident, missing most road points.
+- **Road** (0.12 IoU): very high precision (0.90) but extremely low recall (0.12). The model is conservative, classifying as Road only when highly confident, missing most road points.
 - **Road Marking** (0.03) and **Fence** (0.07) suffer from severe class scarcity (0.5% and 1.0% of the dataset respectively).
-- Results are consistent with the literature for vanilla PointNet on Toronto-3D. PointNet++ reports 42–59% mIoU with local feature aggregation (set abstraction layers) that vanilla PointNet lacks.
+- Results are consistent with the literature for vanilla PointNet on Toronto-3D. PointNet++ reports 42 to 59% mIoU with local feature aggregation (set abstraction layers) that vanilla PointNet lacks.
 
----
+## V2 (Improved) Results
 
-## V2 — Improved Results
-
-**Configuration**: PointNet with weighted CrossEntropyLoss (inverse √freq), CosineAnnealingWarmRestarts (T₀=20, T_mult=2), data augmentation (rotation Z, jitter, scaling), AdamW (wd=1e-4), AMP, 20×20m blocks (stride 10m), 4096–8192 points/block, 100 epochs + early stopping (patience=15).
+**Configuration**: PointNet with weighted CrossEntropyLoss (inverse √freq), CosineAnnealingWarmRestarts (T₀=20, T_mult=2), data augmentation (rotation Z, jitter, scaling), AdamW (wd=1e-4), AMP, 20×20m blocks (stride 10m), 4096 to 8192 points/block, 100 epochs + early stopping (patience=15).
 
 ### V2 Grid Search
 
@@ -180,11 +172,9 @@ Evaluated on L003 (41M points, 505 blocks).
 
 - **Road** shows the most dramatic improvement: IoU jumps from 0.12 to 0.59 (+383%). The larger 20m blocks provide much more spatial context, and the weighted loss rebalances training toward correctly classifying road surfaces.
 - **Utility Line** (+21%), **Road Marking** (+370%), **Car** (+24%): augmentation and weighted loss significantly improve minority class performance.
-- **Building** shows a slight decrease (0.36 → 0.35): a natural trade-off when rebalancing toward weaker classes.
+- **Building** shows a slight decrease (0.36 to 0.35): a natural trade-off when rebalancing toward weaker classes.
 - **Fence** remains the hardest class (0.07): only 1% of the dataset with geometrically ambiguous structures.
-- The gap to PointNet++ (42–59% mIoU in literature) confirms that the architectural limitations of vanilla PointNet (no local feature hierarchy) remain the main bottleneck.
-
----
+- The gap to PointNet++ (42 to 59% mIoU in literature) confirms that the architectural limitations of vanilla PointNet (no local feature hierarchy) remain the main bottleneck.
 
 ## V1 vs V2 Comparison
 
@@ -205,16 +195,16 @@ Evaluated on L003 (41M points, 505 blocks).
 | Road | 0.123 | **0.594** | +383% |
 | Road Marking | 0.029 | **0.136** | +370% |
 | Natural | 0.405 | **0.470** | +16% |
-| Building | 0.358 | 0.346 | −3% |
+| Building | 0.358 | 0.346 | -3% |
 | Utility Line | 0.349 | **0.422** | +21% |
 | Pole | 0.156 | **0.188** | +21% |
 | Car | 0.193 | **0.239** | +24% |
-| Fence | 0.069 | 0.065 | −5% |
+| Fence | 0.069 | 0.065 | -5% |
 
 ### Key Takeaways
 
-1. **Larger spatial blocks** (10m → 20m) are the single most impactful change, especially for spatially extended classes like Road.
+1. **Larger spatial blocks** (10m to 20m) are the single most impactful change, especially for spatially extended classes like Road.
 2. **Weighted cross-entropy** effectively addresses the severe class imbalance (111× ratio), rescuing Road from 0.12 to 0.59 IoU.
 3. **Data augmentation** improves robustness across all classes, particularly for minority classes with limited training samples.
 4. **Cosine annealing + early stopping** allows longer training (100 vs 30 epochs) without overfitting, while reducing the need for manual LR schedule tuning.
-5. The remaining gap to PointNet++ (~42–59% mIoU) reflects the fundamental architectural limitation of PointNet: no local neighborhood feature aggregation. Closing this gap would require hierarchical architectures (e.g., PointNet++, KPConv, RandLA-Net).
+5. The remaining gap to PointNet++ (approx. 42 to 59% mIoU) reflects the fundamental architectural limitation of PointNet: no local neighborhood feature aggregation. Closing this gap would require hierarchical architectures such as PointNet++, KPConv, or RandLA-Net.
