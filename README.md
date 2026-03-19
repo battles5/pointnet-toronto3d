@@ -13,7 +13,7 @@ The project follows a two-phase approach:
 1. **V1 (Baseline)**: vanilla PointNet with standard cross-entropy loss and StepLR scheduler.
 2. **V2 (Improved)**: data augmentation, weighted cross-entropy, cosine annealing with warm restarts, larger spatial blocks, and mixed-precision training.
 
-V2 achieves **+43% mIoU** and **+37% accuracy** over the baseline. Full results and analysis are available in [RESULTS.md](RESULTS.md).
+V2 achieves **+8.7 pp mIoU** and **+14.7 pp accuracy** over the baseline. Full results and analysis are available in [RESULTS.md](RESULTS.md).
 
 ## Dataset
 
@@ -107,9 +107,9 @@ Both v1 and v2 follow the same structure:
 
 | Metric | V1 (Baseline) | V2 (Improved) | Δ |
 |--------|---------------|---------------|---|
-| Overall Accuracy | 39.4% | **54.1%** | +37% |
-| Mean IoU | 20.4% | **29.1%** | +43% |
-| CV mIoU | 0.281 ± 0.017 | **0.340 ± 0.020** | +21% |
+| Overall Accuracy | 39.4% | **54.1%** | +14.7 pp |
+| Mean IoU | 20.4% | **29.1%** | +8.7 pp |
+| CV mIoU | 0.281 ± 0.017 | **0.340 ± 0.020** | +0.059 |
 
 See [RESULTS.md](RESULTS.md) for detailed per-class metrics, grid search tables, and analysis.
 
