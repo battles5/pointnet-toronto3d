@@ -1,0 +1,1 @@
+{"stage": "cv_done", "best_params": {"batch_size": 64, "learning_rate": 0.0005, "num_points": 4096}, "cv_mean_miou": 0.3398574152886237, "cv_std_miou": 0.0204044526668567}

@@ -1,0 +1,20 @@
+# Data (too large for git)
+data/
+course_materials/
+
+# Model weights
+results/*.pth
+results_v2/*.pth
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# SLURM logs
+logs/
+
+# OS
+.DS_Store
+Thumbs.db

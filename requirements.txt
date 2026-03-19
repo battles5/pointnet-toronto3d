@@ -1,0 +1,10 @@
+torch>=2.0
+numpy
+pandas
+matplotlib
+seaborn
+scikit-learn
+laspy
+open3d
+plyfile
+tqdm
